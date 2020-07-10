@@ -1,0 +1,5 @@
+*.rs text=auto
+.gitattributes text=auto
+.gitignore text=auto
+*.toml text=auto
+
