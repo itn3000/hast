@@ -32,6 +32,22 @@ pub struct CsvError {
     message: String,
     kind: csv::ErrorKind
 }
+
+#[derive(Debug)]
+pub struct GlobPatternError {
+    e: glob::PatternError,
+    message: String,
+}
+#[derive(Debug)]
+pub struct GlobError {
+    e: glob::GlobError,
+    message: String,
+}
+#[derive(Debug)]
+pub struct PathError {
+    p: std::path::PathBuf,
+    message: String,
+}
 #[derive(Debug)]
 pub enum ApplicationError {
     Io(std::io::Error),
@@ -40,6 +56,9 @@ pub enum ApplicationError {
     Check(CheckError),
     Csv(CsvError),
     Parse(ParseError),
+    GlobPattern(GlobPatternError),
+    Glob(GlobError),
+    Path(PathError)
 }
 
 impl ApplicationError {
@@ -71,6 +90,24 @@ impl ApplicationError {
         ApplicationError::Parse(ParseError {
             parameter: parameter.to_owned(),
             message: msg.to_owned()
+        })
+    }
+    pub fn from_glob_pattern_error(e: glob::PatternError, msg: &str) -> ApplicationError {
+        ApplicationError::GlobPattern(GlobPatternError {
+            e: e,
+            message: msg.to_owned()
+        })
+    }
+    pub fn from_glob_error(e: glob::GlobError, msg: &str) -> ApplicationError {
+        ApplicationError::Glob(GlobError {
+            e: e,
+            message: msg.to_owned()
+        })
+    }
+    pub fn from_path_error(p: &std::path::Path, msg: &str) -> ApplicationError {
+        ApplicationError::Path(PathError {
+            p: std::path::PathBuf::from(p),
+            message: msg.to_string()
         })
     }
 }

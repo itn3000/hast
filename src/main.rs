@@ -5,6 +5,7 @@ extern crate digest;
 extern crate sha1;
 extern crate sha2;
 extern crate sha3;
+extern crate glob;
 
 use clap::App;
 use clap::SubCommand;

@@ -1,9 +1,9 @@
+use super::digestutil;
 use super::error::ApplicationError;
 use super::ioutil;
 use clap::ArgMatches;
 use digest::Digest;
 use std::io::Write;
-use super::digestutil;
 
 fn write_calc_result_to_csv_output<W>(
     data: &[u8],
@@ -16,7 +16,7 @@ where
 {
     let mut wstr = String::new();
     for b in data {
-        wstr.push_str(format!("{:x}", b).as_str());
+        wstr.push_str(format!("{:02x}", b).as_str());
     }
     match out_f.write_record(&[inputfile, wstr.as_str()]) {
         Ok(_) => Ok(()),
@@ -25,22 +25,6 @@ where
             format!("failed to write result({})", outputfile).as_str(),
         )),
     }?;
-    Ok(())
-}
-
-pub fn do_calc_sha1(matches: &ArgMatches) -> Result<(), ApplicationError> {
-    let outputfile = matches.value_of("output").unwrap_or_else(|| "-");
-    let out_f = ioutil::create_file_for_write(outputfile)?;
-    let mut out_f = csv::Writer::from_writer(out_f);
-    if let Some(vals) = matches.values_of("file") {
-        for inputfile in vals {
-            let mut in_f = ioutil::get_file_or_stdin(inputfile)?;
-            let mut d: sha1::Sha1 = sha1::Sha1::default();
-            digestutil::update_digest(&mut d, &mut in_f)?;
-            let data: Vec<u8> = d.finalize().to_vec();
-            write_calc_result_to_csv_output(&data, &mut out_f, inputfile, outputfile)?;
-        }
-    }
     Ok(())
 }
 
@@ -56,12 +40,48 @@ where
     let mut out_f = csv::Writer::from_writer(out_f);
     if let Some(vals) = matches.values_of("file") {
         for inputfile in vals {
-            let mut in_f = ioutil::get_file_or_stdin(inputfile)?;
-            digestutil::update_digest(&mut d, &mut in_f)?;
-            let bytes: Vec<u8> = d.finalize_reset().to_vec();
-            write_calc_result_to_csv_output(&bytes, &mut out_f, inputfile, outputfile)?;
+            if inputfile != "-" {
+                let globresult = match glob::glob(inputfile) {
+                    Ok(v) => Ok(v),
+                    Err(e) => Err(ApplicationError::from_glob_pattern_error(
+                        e,
+                        format!("failed to parse glob({})", inputfile).as_str(),
+                    )),
+                }?;
+                for p1 in globresult {
+                    let p = match p1 {
+                        Ok(v) => Ok(v),
+                        Err(e) => Err(ApplicationError::from_glob_error(
+                            e,
+                            "failed to get globbed path",
+                        )),
+                    }?;
+                    if let Some(p) = p.to_str() {
+                        let mut in_f = ioutil::get_file_or_stdin(p)?;
+                        digestutil::update_digest(&mut d, &mut in_f)?;
+                        let bytes: Vec<u8> = d.finalize_reset().to_vec();
+                        write_calc_result_to_csv_output(&bytes, &mut out_f, p, outputfile)?;
+                    } else {
+                        return Err(ApplicationError::from_path_error(
+                            p.as_path(),
+                            "failed to extract path string",
+                        ));
+                    }
+                }
+            } else {
+                let mut in_f = ioutil::get_file_or_stdin(inputfile)?;
+                digestutil::update_digest(&mut d, &mut in_f)?;
+                let bytes: Vec<u8> = d.finalize_reset().to_vec();
+                write_calc_result_to_csv_output(&bytes, &mut out_f, inputfile, outputfile)?;
+            }
         }
     }
+    Ok(())
+}
+
+pub fn do_calc_sha1(matches: &ArgMatches) -> Result<(), ApplicationError> {
+    let outputfile = matches.value_of("output").unwrap_or_else(|| "-");
+    do_calc_fixed_output(matches, sha1::Sha1::new(), outputfile)?;
     Ok(())
 }
 
@@ -85,17 +105,7 @@ pub fn do_calc_sha2(matches: &ArgMatches) -> Result<(), ApplicationError> {
 
 pub fn do_calc_md5(matches: &ArgMatches) -> Result<(), ApplicationError> {
     let outputfile = matches.value_of("output").unwrap_or_else(|| "-");
-    let out_f = ioutil::create_file_for_write(outputfile)?;
-    let mut out_f = csv::Writer::from_writer(out_f);
-    if let Some(vals) = matches.values_of("file") {
-        for inputfile in vals {
-            let mut in_f = ioutil::get_file_or_stdin(inputfile)?;
-            let mut d = md5::Md5::new();
-            digestutil::update_digest(&mut d, &mut in_f)?;
-            let data: Vec<u8> = d.finalize().to_vec();
-            write_calc_result_to_csv_output(&data, &mut out_f, inputfile, outputfile)?;
-        }
-    }
+    do_calc_fixed_output(matches, md5::Md5::new(), outputfile)?;
     Ok(())
 }
 
@@ -128,10 +138,40 @@ where
     let mut out_f = csv::Writer::from_writer(out_f);
     if let Some(vals) = matches.values_of("file") {
         for inputfile in vals {
-            let mut in_f = ioutil::get_file_or_stdin(inputfile)?;
-            digestutil::update_digest(&mut d, &mut in_f)?;
-            let bytes = d.finalize_boxed_reset(outputsize);
-            write_calc_result_to_csv_output(&bytes, &mut out_f, inputfile, outputfile)?;
+            if inputfile != "-" {
+                let globresult = match glob::glob(inputfile) {
+                    Ok(v) => Ok(v),
+                    Err(e) => Err(ApplicationError::from_glob_pattern_error(
+                        e,
+                        format!("failed to parse glob({})", inputfile).as_str(),
+                    )),
+                }?;
+                for p in globresult {
+                    let p = match p {
+                        Ok(v) => Ok(v),
+                        Err(e) => Err(ApplicationError::from_glob_error(
+                            e,
+                            "failed to get globbed path",
+                        )),
+                    }?;
+                    if let Some(p) = p.as_path().to_str() {
+                        let mut in_f = ioutil::get_file_or_stdin(p)?;
+                        digestutil::update_digest(&mut d, &mut in_f)?;
+                        let bytes = d.finalize_boxed_reset(outputsize);
+                        write_calc_result_to_csv_output(&bytes, &mut out_f, p, outputfile)?;
+                    } else {
+                        return Err(ApplicationError::from_path_error(
+                            p.as_path(),
+                            "failed to tostring from path",
+                        ));
+                    }
+                }
+            } else {
+                let mut in_f = ioutil::get_file_or_stdin(inputfile)?;
+                digestutil::update_digest(&mut d, &mut in_f)?;
+                let bytes = d.finalize_boxed_reset(outputsize);
+                write_calc_result_to_csv_output(&bytes, &mut out_f, inputfile, outputfile)?;
+            }
         }
     }
     Ok(())
@@ -140,10 +180,15 @@ where
 pub fn do_calc_shake(matches: &ArgMatches) -> Result<(), ApplicationError> {
     let outputfile = matches.value_of("output").unwrap_or_else(|| "-");
     let bitlength = matches.value_of("length").unwrap_or_else(|| "128");
-    let outlength = super::do_parse::<usize>(matches.value_of("outputlength").unwrap_or_else(|| "128"))?;
+    let outlength =
+        super::do_parse::<usize>(matches.value_of("outputlength").unwrap_or_else(|| "128"))?;
     match bitlength {
-        "128" => do_calc_extendable_output(matches, sha3::Shake128::default(), outlength, outputfile),
-        "256" => do_calc_extendable_output(matches, sha3::Shake256::default(), outlength, outputfile),
+        "128" => {
+            do_calc_extendable_output(matches, sha3::Shake128::default(), outlength, outputfile)
+        }
+        "256" => {
+            do_calc_extendable_output(matches, sha3::Shake256::default(), outlength, outputfile)
+        }
         _ => Err(ApplicationError::from_parameter(
             "length",
             format!("invalid length parameter({})", bitlength).as_str(),
@@ -158,7 +203,10 @@ pub fn do_calc_blake2(matches: &ArgMatches) -> Result<(), ApplicationError> {
     match algorithm {
         "b" => do_calc_fixed_output(matches, blake2::Blake2b::new(), outputfile),
         "s" => do_calc_fixed_output(matches, blake2::Blake2s::new(), outputfile),
-        _ => Err(ApplicationError::from_parameter("algorithm", format!("Unknown algorithm({})", algorithm).as_str()))
+        _ => Err(ApplicationError::from_parameter(
+            "algorithm",
+            format!("Unknown algorithm({})", algorithm).as_str(),
+        )),
     }?;
     Ok(())
 }
