@@ -44,7 +44,7 @@ fn create_output_length_arg<'a, 'b>(default_size: &'a str) -> Arg<'a, 'b> {
         .default_value(default_size)
         .short("x")
         .long("outputlength")
-        .help("hash output length")
+        .help("hash output length in bytes")
 }
 
 pub fn create_calc_sha1<'a, 'b>() -> App<'a, 'b> {
