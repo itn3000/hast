@@ -15,6 +15,12 @@ pub struct CheckError {
     hash2: String
 }
 
+#[derive(Debug)]
+pub struct ParseError {
+    message: String,
+    parameter: String,
+}
+
 impl std::fmt::Display for CheckError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}(file1 = ({}, {}), file2 = ({}, {})", self.message, self.filename1, self.hash1, self.filename2, self.hash2)
@@ -32,7 +38,8 @@ pub enum ApplicationError {
     Parameter(InvalidParameter),
     Clap(clap::Error),
     Check(CheckError),
-    Csv(CsvError)
+    Csv(CsvError),
+    Parse(ParseError),
 }
 
 impl ApplicationError {
@@ -58,6 +65,12 @@ impl ApplicationError {
         ApplicationError::Csv(CsvError {
             message: msg.to_owned(),
             kind: e.into_kind()
+        })
+    }
+    pub fn from_parse_error(parameter: &str, msg: &str) -> ApplicationError {
+        ApplicationError::Parse(ParseError {
+            parameter: parameter.to_owned(),
+            message: msg.to_owned()
         })
     }
 }

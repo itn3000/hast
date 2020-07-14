@@ -1,55 +1,31 @@
+extern crate blake2;
 extern crate clap;
+extern crate csv;
+extern crate digest;
 extern crate sha1;
 extern crate sha2;
-extern crate digest;
-extern crate csv;
+extern crate sha3;
 
 use clap::App;
-use clap::Arg;
 use clap::SubCommand;
-use std::io::Read;
 
-mod error;
-mod ioutil;
 mod calc;
 mod check;
+mod digestutil;
+mod error;
+mod ioutil;
+mod command;
 
 use error::ApplicationError;
 
-fn create_calc_file_arg<'a, 'b>() -> Arg<'a, 'b> {
-    Arg::with_name("file")
-        .value_name("FILE")
-        .default_value("-")
-        .multiple(true)
-        .required(false)
-        .help("input files, '-' means stdin")
-}
-
-fn create_check_file_arg<'a, 'b>() -> Arg<'a, 'b> {
-    Arg::with_name("file")
-        .value_name("FILE")
-        .default_value("-")
-        .multiple(false)
-        .required(false)
-        .help("input file(must be output of hast calc result), '-' means stdin")
-}
-
-fn create_output_arg<'a, 'b>() -> Arg<'a, 'b> {
-    Arg::with_name("output")
-        .value_name("OUTPUT_FILE")
-        .default_value("-")
-        .short("o")
-        .long("output")
-        .help("output file, '-' means stdout")
-}
-
-fn create_basepath_arg<'a, 'b>() -> Arg<'a, 'b> {
-    Arg::with_name("basepath")
-        .value_name("BASE_PATH")
-        .default_value(".")
-        .short("b")
-        .long("basepath")
-        .help("base path for searching file")
+fn do_parse<I>(s: &str) -> Result<I, ApplicationError>
+where
+    I: std::str::FromStr,
+{
+    match s.parse::<I>() {
+        Ok(v) => Ok(v),
+        Err(_) => Err(ApplicationError::from_parse_error(s, "failed to parse integer")),
+    }
 }
 
 fn create_app<'a, 'b>() -> App<'a, 'b> {
@@ -57,126 +33,68 @@ fn create_app<'a, 'b>() -> App<'a, 'b> {
         .about("calculate hash")
         .subcommand(
             SubCommand::with_name("calc")
-            .about("calc hash")
-            .subcommand(
-                SubCommand::with_name("md5")
-                    .about("calc md5 hash")
-                    .arg(create_calc_file_arg())
-                    .arg(create_output_arg())
-            )
-            .subcommand(
-                SubCommand::with_name("sha1")
-                    .about("calc sha1 hash")
-                    .arg(create_calc_file_arg())
-                    .arg(create_output_arg())
-            )
-            .subcommand(
-                SubCommand::with_name("sha2")
-                    .about("calc sha2 hash")
-                    .arg(create_calc_file_arg())
-                    .arg(create_output_arg())
-                    .arg(
-                        Arg::with_name("length")
-                            .help("bit length")
-                            .possible_values(&["224", "256", "384", "512", "512/224", "512/256"])
-                            .default_value("256")
-                            .short("l")
-                            .long("length")
-                    )
-            )
+                .about("calc hash")
+                .subcommand(command::create_calc_md5())
+                .subcommand(command::create_calc_sha1())
+                .subcommand(command::create_calc_sha2())
+                .subcommand(command::create_calc_sha3())
+                .subcommand(command::create_calc_shake())
+                .subcommand(command::create_calc_blake2()),
         )
         .subcommand(
             SubCommand::with_name("check")
-            .about("check hash")
-            .subcommand(
-                SubCommand::with_name("md5")
-                    .about("check md5 hash")
-                    .arg(create_check_file_arg())
-                    .arg(create_basepath_arg())
-            )
-            .subcommand(
-                SubCommand::with_name("sha1")
-                    .about("check sha1 hash")
-                    .arg(create_check_file_arg())
-                    .arg(create_basepath_arg())
-            )
-            .subcommand(
-                SubCommand::with_name("sha2")
-                    .about("check sha2 hash")
-                    .arg(create_check_file_arg())
-                    .arg(create_basepath_arg())
-                    .arg(
-                        Arg::with_name("length")
-                            .help("bit length")
-                            .possible_values(&["224", "256", "384", "512", "512/224", "512/256"])
-                            .default_value("256")
-                            .short("l")
-                            .long("length")
-                    )
-            )
+                .about("check hash")
+                .subcommand(command::create_check_md5())
+                .subcommand(command::create_check_sha1())
+                .subcommand(command::create_check_sha2())
+                .subcommand(command::create_check_sha3())
+                .subcommand(command::create_check_shake())
+                .subcommand(command::create_check_blake2()),
         )
 }
-
-fn update_digest<D, R>(d: &mut D, in_f: &mut R) -> Result<(), ApplicationError> where D: digest::Digest, R: Read {
-    let mut buf: Vec<u8> = Vec::new();
-    buf.resize(1024, 0u8);
-    loop {
-        let n = match in_f.read(&mut buf) {
-            Ok(v) => Ok(v),
-            Err(e) => Err(ApplicationError::Io(e))
-        }?;
-        d.update(&buf[0..n]);
-        if n == 0 || n < 1024 {
-            break;
-        }
-    }
-    Ok(())
-}
-
 
 fn main() -> Result<(), ApplicationError> {
     let app = create_app();
     let mut app2 = app.clone();
     let matches = app.get_matches();
     match matches.subcommand() {
-        ("calc", Some(app)) => {
-            match app.subcommand() {
-                ("md5", Some(app)) => {
-                    calc::do_calc_md5(app)
-                },
-                ("sha1", Some(app)) => {
-                    calc::do_calc_sha1(app)
-                },
-                ("sha2", Some(app)) => {
-                    calc::do_calc_sha2(app)
-                },
-                _ => {
-                    return Err(ApplicationError::from_parameter("unknown", "unknown command"))
-                }
+        ("calc", Some(app)) => match app.subcommand() {
+            ("md5", Some(app)) => calc::do_calc_md5(app),
+            ("sha1", Some(app)) => calc::do_calc_sha1(app),
+            ("sha2", Some(app)) => calc::do_calc_sha2(app),
+            ("sha3", Some(app)) => calc::do_calc_sha3(app),
+            ("shake", Some(app)) => calc::do_calc_shake(app),
+            ("blake2", Some(app)) => calc::do_calc_blake2(app),
+            _ => {
+                return Err(ApplicationError::from_parameter(
+                    "unknown",
+                    "unknown command",
+                ))
             }
         },
-        ("check", Some(app)) => {
-            match app.subcommand() {
-                ("md5", Some(app)) => {
-                    check::do_check_md5(app)
-                },
-                ("sha1", Some(app)) => {
-                    check::do_check_sha1(app)
-                },
-                ("sha2", Some(app)) => {
-                    check::do_check_sha2(app)
-                },
-                _ => {
-                    return Err(ApplicationError::from_parameter("unknown", "unknown command"))
-                }
+        ("check", Some(app)) => match app.subcommand() {
+            ("md5", Some(app)) => check::do_check_md5(app),
+            ("sha1", Some(app)) => check::do_check_sha1(app),
+            ("sha2", Some(app)) => check::do_check_sha2(app),
+            ("sha3", Some(app)) => check::do_check_sha3(app),
+            ("shake", Some(app)) => check::do_check_shake(app),
+            ("blake2", Some(app)) => check::do_check_blake2(app),
+            _ => {
+                return Err(ApplicationError::from_parameter(
+                    "unknown",
+                    "unknown command",
+                ))
             }
         },
         _ => {
             match app2.print_long_help() {
                 Err(e) => return Err(ApplicationError::Clap(e)),
-                _ => ()
+                _ => (),
             };
-            return Err(ApplicationError::from_parameter("unknown", "unknown command"))
+            return Err(ApplicationError::from_parameter(
+                "unknown",
+                "unknown command",
+            ));
         }
     }?;
     Ok(())
