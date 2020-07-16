@@ -4,13 +4,17 @@ use digest::Digest;
 use clap::ArgMatches;
 use super::digestutil;
 
+fn specialize_path_separator(input: &str) -> String {
+    input.replace("/", std::path::MAIN_SEPARATOR.to_string().as_str())
+}
+
 fn check_hash_fixed<D>(basepath: &str, inputfile: &str, expected_hash: &str, d: &mut D) -> Result<(), ApplicationError> where D: digest::Digest + digest::Update {
     let filepath = if inputfile == "-" {
         "-".to_owned()
     } else {
         let mut p = std::path::PathBuf::new();
         p.push(basepath);
-        p.push(inputfile);
+        p.push(specialize_path_separator(inputfile));
         match p.to_str() {
             Some(v) => v.to_owned(),
             None => return Err(ApplicationError::from_parameter("filename", format!("filename combine error({}, {})", basepath, inputfile).as_str()))
@@ -21,7 +25,7 @@ fn check_hash_fixed<D>(basepath: &str, inputfile: &str, expected_hash: &str, d: 
     let hash = d.finalize_reset();
     let mut hashstr = String::new();
     for b in hash {
-        hashstr.push_str(format!("{:x}", b).as_str());
+        hashstr.push_str(format!("{:02x}", b).as_str());
     }
     if expected_hash != hashstr {
         return Err(ApplicationError::from_check("hash check failed", &inputfile, &filepath, &expected_hash, &hashstr));

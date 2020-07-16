@@ -5,6 +5,10 @@ use clap::ArgMatches;
 use digest::Digest;
 use std::io::Write;
 
+fn normalize_path_separator<'a>(input: &'a str) -> String {
+    input.replace("\\", "/")
+}
+
 fn write_calc_result_to_csv_output<W>(
     data: &[u8],
     out_f: &mut csv::Writer<W>,
@@ -18,7 +22,7 @@ where
     for b in data {
         wstr.push_str(format!("{:02x}", b).as_str());
     }
-    match out_f.write_record(&[inputfile, wstr.as_str()]) {
+    match out_f.write_record(&[normalize_path_separator(inputfile).as_str(), wstr.as_str()]) {
         Ok(_) => Ok(()),
         Err(e) => Err(ApplicationError::from_csv(
             e,
