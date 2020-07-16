@@ -15,6 +15,26 @@ This is file hash calculation tool inspired by [rash](https://github.com/themadp
 * [SHA3(including Shake)](https://en.wikipedia.org/wiki/SHA-3)
 * [Blake2](https://en.wikipedia.org/wiki/BLAKE_(hash_function)#BLAKE2)
 
+# Installation
+
+## download from releases
+
+you can download precompiled single binaries from [github release page](https://github.com/itn3000/hast/releases)
+
+## install from cargo
+
+if you want to install via cargo, you need compilation environment.
+
+### From source
+
+1. checkout source from [github](https://github.com/itn3000/hast)
+2. move checkout directory
+3. run `cargo install`
+
+### From github repository
+
+1. run `cargo install --git https://github.com/itn3000/hast.git --tag [tag_version]`
+
 # Usage
 
 you can get help with `hast help` or `hast [subcommand] --help` command.
