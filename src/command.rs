@@ -162,6 +162,7 @@ fn create_blake2_algorithm_arg<'a, 'b>() -> Arg<'a, 'b> {
         .possible_values(&["s", "b"])
         .short("a")
         .long("algorithm")
+        .default_value("s")
 }
 
 pub fn create_calc_blake2<'a, 'b>() -> App<'a, 'b> {
